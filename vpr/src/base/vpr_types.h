@@ -113,6 +113,9 @@ enum class e_router_lookahead {
     CLASSIC, ///<VPR's classic lookahead (assumes uniform wire types)
     MAP,     ///<Lookahead considering different wire types (see Oleg Petelin's MASc Thesis)
     NO_OP    ///<A no-operation lookahead which always returns zero
+    CONNECTION_BOX_MAP,
+    // Lookahead considering different wire types and IPIN
+    // connection box.
 };
 
 enum class e_route_bb_update {
