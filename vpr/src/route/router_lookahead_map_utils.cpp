@@ -38,7 +38,7 @@ PQ_Entry::PQ_Entry(
 
         float base_cost = 0.f;
         if (device_ctx.rr_switch_inf[switch_ind].configurable()) {
-            base_cost = get_rr_cong_cost(set_rr_node_ind);
+            base_cost = get_single_rr_cong_base_cost(set_rr_node_ind);
         }
 
         VTR_ASSERT(T_linear >= 0.);
@@ -88,7 +88,7 @@ util::PQ_Entry_Base_Cost::PQ_Entry_Base_Cost(
     if (parent != nullptr) {
         auto& device_ctx = g_vpr_ctx.device();
         if (device_ctx.rr_switch_inf[switch_ind].configurable()) {
-            this->base_cost = parent->base_cost + get_rr_cong_cost(set_rr_node_ind);
+            this->base_cost = parent->base_cost + get_single_rr_cong_base_cost(set_rr_node_ind);
         } else {
             this->base_cost = parent->base_cost;
         }
