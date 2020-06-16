@@ -591,21 +591,6 @@ static bool add_paths(int start_node_ind,
 
     bool new_sample_found = false;
 
-    auto to_tile_type = device_ctx.grid[rr_graph.node_xlow(node)][rr_graph.node_ylow(node)].type;
-    auto to_tile_index = to_tile_type->index;
-
-    auto to_ptc = rr_graph.node_ptc_num(node);
-
-    float site_pin_delay = std::numeric_limits<float>::infinity();
-    if (f_chan_ipins_delays[to_tile_index].size() != 0) {
-        for (const auto& kv : f_chan_ipins_delays[to_tile_index][to_ptc]) {
-            const t_reachable_wire_inf& reachable_wire_inf = kv.second;
-
-            float this_delay = reachable_wire_inf.delay;
-            site_pin_delay = std::min(this_delay, site_pin_delay);
-        }
-    }
-
     // reconstruct the path
     std::vector<int> path;
     for (int i = paths[node_ind].parent; i != start_node_ind; i = paths[i].parent) {
@@ -613,8 +598,6 @@ static bool add_paths(int start_node_ind,
         path.push_back(i);
     }
     path.push_back(start_node_ind);
-
-    current.adjust_Tsw(-site_pin_delay);
 
     // add each node along the path subtracting the incremental costs from the current costs
     Entry start_to_here(start_node_ind, UNDEFINED, nullptr);

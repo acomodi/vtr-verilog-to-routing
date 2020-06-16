@@ -1912,7 +1912,7 @@ argparse::ArgumentParser create_arg_parser(std::string prog_name, t_options& arg
             " * classic: The classic VPR lookahead (may perform better on un-buffered routing\n"
             "            architectures)\n"
             " * map: A more advanced lookahead which accounts for diverse wire type\n")
-        .default_value("map")
+        .default_value("classic")
         .show_in(argparse::ShowIn::HELP_ONLY);
 
     route_timing_grp.add_argument(args.router_max_convergence_count, "--router_max_convergence_count")
