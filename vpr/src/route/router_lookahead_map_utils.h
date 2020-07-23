@@ -21,6 +21,7 @@
 #include <queue>
 #include <unordered_map>
 #include "vpr_types.h"
+#include "vtr_geometry.h"
 #include "rr_node.h"
 
 namespace util {
@@ -123,6 +124,44 @@ class Expansion_Cost_Entry {
         return entry;
     }
 };
+
+// Keys in the RoutingCosts map
+struct RoutingCostKey {
+    // index of the channel (CHANX or CHANY)
+    int chan_index;
+
+    // segment type index
+    int seg_index;
+
+    // offset of the destination connection box from the starting segment
+    vtr::Point<int> delta;
+
+    RoutingCostKey()
+        : seg_index(-1)
+        , delta(0, 0) {}
+    RoutingCostKey(int chan_index_arg, int seg_index_arg, vtr::Point<int> delta_arg)
+        : chan_index(chan_index_arg)
+        , seg_index(seg_index_arg)
+        , delta(delta_arg) {}
+
+    bool operator==(const RoutingCostKey& other) const {
+        return seg_index == other.seg_index && chan_index == other.chan_index && delta == other.delta;
+    }
+};
+
+// hash implementation for RoutingCostKey
+struct HashRoutingCostKey {
+    std::size_t operator()(RoutingCostKey const& key) const noexcept {
+        std::size_t hash = std::hash<int>{}(key.chan_index);
+        vtr::hash_combine(hash, key.seg_index);
+        vtr::hash_combine(hash, key.delta.x());
+        vtr::hash_combine(hash, key.delta.y());
+        return hash;
+    }
+};
+
+// Map used to store intermediate routing costs
+typedef std::unordered_map<RoutingCostKey, float, HashRoutingCostKey> RoutingCosts;
 
 /* a class that represents an entry in the Dijkstra expansion priority queue */
 class PQ_Entry {
