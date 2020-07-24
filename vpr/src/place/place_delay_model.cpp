@@ -2,6 +2,7 @@
 #include "place_delay_model.h"
 #include "globals.h"
 #include "router_lookahead_map.h"
+#include "router_lookahead_cost_map.h"
 #include "rr_graph2.h"
 
 #include "timing_place_lookup.h"

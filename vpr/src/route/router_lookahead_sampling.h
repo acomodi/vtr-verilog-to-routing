@@ -23,7 +23,7 @@ struct SampleRegion {
 
     // locations to try
     // The computation will keep expanding each of the points
-    // until a number of paths (segment -> connection box) are found.
+    // until a number of paths (segment -> destination node) are found.
     std::vector<SamplePoint> points;
 
     // used to sort the regions to improve caching

@@ -21,6 +21,7 @@
 #include <queue>
 #include <unordered_map>
 #include "vpr_types.h"
+#include "vtr_geometry.h"
 #include "rr_node.h"
 
 namespace util {
@@ -35,6 +36,44 @@ enum e_representative_entry_method {
     GEOMEAN,
     MEDIAN
 };
+
+// Keys in the RoutingCosts map
+struct RoutingCostKey {
+    // index of the channel (CHANX or CHANY)
+    int chan_index;
+
+    // segment type index
+    int seg_index;
+
+    // offset of the destination rr node from the starting segment
+    vtr::Point<int> delta;
+
+    RoutingCostKey()
+        : seg_index(-1)
+        , delta(0, 0) {}
+    RoutingCostKey(int chan_index_arg, int seg_index_arg, vtr::Point<int> delta_arg)
+        : chan_index(chan_index_arg)
+        , seg_index(seg_index_arg)
+        , delta(delta_arg) {}
+
+    bool operator==(const RoutingCostKey& other) const {
+        return seg_index == other.seg_index && chan_index == other.chan_index && delta == other.delta;
+    }
+};
+
+// hash implementation for RoutingCostKey
+struct HashRoutingCostKey {
+    std::size_t operator()(RoutingCostKey const& key) const noexcept {
+        std::size_t hash = std::hash<int>{}(key.chan_index);
+        vtr::hash_combine(hash, key.seg_index);
+        vtr::hash_combine(hash, key.delta.x());
+        vtr::hash_combine(hash, key.delta.y());
+        return hash;
+    }
+};
+
+// Map used to store intermediate routing costs
+typedef std::unordered_map<RoutingCostKey, float, HashRoutingCostKey> RoutingCosts;
 
 /* f_cost_map is an array of these cost entries that specifies delay/congestion estimates
  * to travel relative x/y distances */
@@ -200,6 +239,34 @@ void expand_dijkstra_neighbours(const t_rr_graph_storage& rr_nodes,
                                 std::priority_queue<Entry,
                                                     std::vector<Entry>,
                                                     std::greater<Entry>>* pq);
+
+// additional lookups for IPIN/OPIN missing delays
+struct t_reachable_wire_inf {
+    e_rr_type wire_rr_type;
+    int wire_seg_index;
+
+    //Costs to reach the wire type from the current node
+    float congestion;
+    float delay;
+};
+
+typedef std::vector<std::vector<std::map<int, t_reachable_wire_inf>>> t_src_opin_delays; //[0..device_ctx.physical_tile_types.size()-1][0..max_ptc-1][wire_seg_index]
+                                                                                         // ^                                           ^             ^
+                                                                                         // |                                           |             |
+                                                                                         // physical block type index                   |             Reachable wire info
+                                                                                         //                                             |
+                                                                                         //                                             SOURCE/OPIN ptc
+
+typedef std::vector<std::vector<t_reachable_wire_inf>> t_chan_ipins_delays; //[0..device_ctx.physical_tile_types.size()-1][0..max_ptc-1]
+                                                                            // ^                                           ^
+                                                                            // |                                           |
+                                                                            // physical block type index                   |
+                                                                            //                                             |
+                                                                            //                                             SINK/IPIN ptc
+
+vtr::Point<int> pick_sample_tile(t_physical_tile_type_ptr tile_type, vtr::Point<int> prev);
+void dijkstra_flood_to_wires(int itile, RRNodeId node, t_src_opin_delays& src_opin_delays);
+void dijkstra_flood_to_ipins(RRNodeId node, t_chan_ipins_delays& chan_ipins_delays);
 
 } // namespace util
 

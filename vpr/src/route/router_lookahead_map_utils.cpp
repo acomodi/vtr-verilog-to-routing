@@ -5,6 +5,10 @@
 #include "vtr_math.h"
 #include "route_common.h"
 
+constexpr int DIRECT_CONNECT_SPECIAL_SEG_TYPE = -1;
+
+#define MAX_EXPANSION_LEVEL 1
+
 namespace util {
 
 PQ_Entry::PQ_Entry(
@@ -242,5 +246,241 @@ template void expand_dijkstra_neighbours(const t_rr_graph_storage& rr_nodes,
                                          std::priority_queue<PQ_Entry_Base_Cost,
                                                              std::vector<PQ_Entry_Base_Cost>,
                                                              std::greater<PQ_Entry_Base_Cost>>* pq);
+
+template<typename Entry>
+std::pair<float, int> run_dijkstra(int start_node_ind,
+                                   std::vector<bool>* node_expanded,
+                                   std::vector<util::Search_Path>* paths,
+                                   RoutingCosts* routing_costs);
+
+vtr::Point<int> pick_sample_tile(t_physical_tile_type_ptr tile_type, vtr::Point<int> prev) {
+    //Very simple for now, just pick the fist matching tile found
+    vtr::Point<int> loc(OPEN, OPEN);
+
+    //VTR_LOG("Prev: %d,%d\n", prev.x(), prev.y());
+
+    auto& device_ctx = g_vpr_ctx.device();
+    auto& grid = device_ctx.grid;
+
+    int y_init = prev.y() + 1; //Start searching next element above prev
+
+    for (int x = prev.x(); x < int(grid.width()); ++x) {
+        if (x < 0) continue;
+
+        //VTR_LOG("  x: %d\n", x);
+
+        for (int y = y_init; y < int(grid.height()); ++y) {
+            if (y < 0) continue;
+
+            //VTR_LOG("   y: %d\n", y);
+            if (grid[x][y].type->index == tile_type->index) {
+                loc.set_x(x);
+                loc.set_y(y);
+                return loc;
+            }
+        }
+
+        if (loc.x() != OPEN && loc.y() != OPEN) {
+            break;
+        } else {
+            y_init = 0; //Prepare to search next column
+        }
+    }
+    //VTR_LOG("Next: %d,%d\n", loc.x(), loc.y());
+
+    return loc;
+}
+
+void dijkstra_flood_to_wires(int itile, RRNodeId node, t_src_opin_delays& src_opin_delays) {
+    auto& device_ctx = g_vpr_ctx.device();
+    auto& rr_graph = device_ctx.rr_nodes;
+
+    struct t_pq_entry {
+        float delay;
+        float congestion;
+        RRNodeId node;
+
+        bool operator<(const t_pq_entry& rhs) const {
+            return this->delay < rhs.delay;
+        }
+    };
+
+    std::priority_queue<t_pq_entry> pq;
+
+    t_pq_entry root;
+    root.congestion = 0.;
+    root.delay = 0.;
+    root.node = node;
+
+    int ptc = rr_graph.node_ptc_num(node);
+
+    /*
+     * Perform Djikstra from the SOURCE/OPIN of interest, stopping at the the first
+     * reachable wires (i.e until we hit the inter-block routing network), or a SINK
+     * (via a direct-connect).
+     *
+     * Note that typical RR graphs are structured :
+     *
+     *      SOURCE ---> OPIN --> CHANX/CHANY
+     *              |
+     *              --> OPIN --> CHANX/CHANY
+     *              |
+     *             ...
+     *
+     *   possibly with direct-connects of the form:
+     *
+     *      SOURCE --> OPIN --> IPIN --> SINK
+     *
+     * and there is a small number of fixed hops from SOURCE/OPIN to CHANX/CHANY or
+     * to a SINK (via a direct-connect), so this runs very fast (i.e. O(1))
+     */
+    pq.push(root);
+    while (!pq.empty()) {
+        t_pq_entry curr = pq.top();
+        pq.pop();
+
+        e_rr_type curr_rr_type = rr_graph.node_type(curr.node);
+        if (curr_rr_type == CHANX || curr_rr_type == CHANY || curr_rr_type == SINK) {
+            //We stop expansion at any CHANX/CHANY/SINK
+            int seg_index;
+            if (curr_rr_type != SINK) {
+                //It's a wire, figure out its type
+                int cost_index = rr_graph.node_cost_index(curr.node);
+                seg_index = device_ctx.rr_indexed_data[cost_index].seg_index;
+            } else {
+                //This is a direct-connect path between an IPIN and OPIN,
+                //which terminated at a SINK.
+                //
+                //We treat this as a 'special' wire type
+                seg_index = DIRECT_CONNECT_SPECIAL_SEG_TYPE;
+            }
+
+            //Keep costs of the best path to reach each wire type
+            if (!src_opin_delays[itile][ptc].count(seg_index)
+                || curr.delay < src_opin_delays[itile][ptc][seg_index].delay) {
+                src_opin_delays[itile][ptc][seg_index].wire_rr_type = curr_rr_type;
+                src_opin_delays[itile][ptc][seg_index].wire_seg_index = seg_index;
+                src_opin_delays[itile][ptc][seg_index].delay = curr.delay;
+                src_opin_delays[itile][ptc][seg_index].congestion = curr.congestion;
+            }
+
+        } else if (curr_rr_type == SOURCE || curr_rr_type == OPIN || curr_rr_type == IPIN) {
+            //We allow expansion through SOURCE/OPIN/IPIN types
+            int cost_index = rr_graph.node_cost_index(curr.node);
+            float incr_cong = device_ctx.rr_indexed_data[cost_index].base_cost; //Current nodes congestion cost
+
+            for (RREdgeId edge : rr_graph.edge_range(curr.node)) {
+                int iswitch = rr_graph.edge_switch(edge);
+                float incr_delay = device_ctx.rr_switch_inf[iswitch].Tdel;
+
+                RRNodeId next_node = rr_graph.edge_sink_node(edge);
+
+                t_pq_entry next;
+                next.congestion = curr.congestion + incr_cong; //Of current node
+                next.delay = curr.delay + incr_delay;          //To reach next node
+                next.node = next_node;
+
+                pq.push(next);
+            }
+        } else {
+            VPR_ERROR(VPR_ERROR_ROUTE, "Unrecognized RR type");
+        }
+    }
+}
+
+void dijkstra_flood_to_ipins(RRNodeId node, t_chan_ipins_delays& chan_ipins_delays) {
+    auto& device_ctx = g_vpr_ctx.device();
+    auto& rr_graph = device_ctx.rr_nodes;
+
+    struct t_pq_entry {
+        float delay;
+        float congestion;
+        RRNodeId node;
+        int level;
+
+        bool operator<(const t_pq_entry& rhs) const {
+            return this->delay < rhs.delay;
+        }
+    };
+
+    std::priority_queue<t_pq_entry> pq;
+
+    t_pq_entry root;
+    root.congestion = 0.;
+    root.delay = 0.;
+    root.node = node;
+    root.level = 0;
+
+    /*
+     * Perform Djikstra from the CHAN of interest, stopping at the the first
+     * reachable IPIN
+     *
+     * Note that typical RR graphs are structured :
+     *
+     *      CHANX/CHANY --> CHANX/CHANY --> ... --> CHANX/CHANY --> IPIN --> SINK
+     *                  |
+     *                  --> CHANX/CHANY --> ... --> CHANX/CHANY --> IPIN --> SINK
+     *                  |
+     *                  ...
+     *
+     * and there is a variable number of hops from a given CHANX/CHANY  to IPIN.
+     * To avoid impacting on run-time, a fixed number of hops is performed. This
+     * should be enough to find the delay from the last CAHN to IPIN connection.
+     */
+    pq.push(root);
+
+    float site_pin_delay = std::numeric_limits<float>::infinity();
+
+    while (!pq.empty()) {
+        t_pq_entry curr = pq.top();
+        pq.pop();
+
+        e_rr_type curr_rr_type = rr_graph.node_type(curr.node);
+        if (curr_rr_type == IPIN) {
+            int node_x = rr_graph.node_xlow(curr.node);
+            int node_y = rr_graph.node_ylow(curr.node);
+
+            auto tile_type = device_ctx.grid[node_x][node_y].type;
+            int itile = tile_type->index;
+
+            int ptc = rr_graph.node_ptc_num(curr.node);
+
+            if (ptc >= int(chan_ipins_delays[itile].size())) {
+                chan_ipins_delays[itile].resize(ptc + 1); //Inefficient but functional...
+            }
+
+            site_pin_delay = std::min(curr.delay, site_pin_delay);
+            //Keep costs of the best path to reach each wire type
+            chan_ipins_delays[itile][ptc].wire_rr_type = curr_rr_type;
+            chan_ipins_delays[itile][ptc].delay = site_pin_delay;
+            chan_ipins_delays[itile][ptc].congestion = curr.congestion;
+        } else if (curr_rr_type == CHANX || curr_rr_type == CHANY) {
+            if (curr.level >= MAX_EXPANSION_LEVEL) {
+                continue;
+            }
+
+            //We allow expansion through SOURCE/OPIN/IPIN types
+            int cost_index = rr_graph.node_cost_index(curr.node);
+            float new_cong = device_ctx.rr_indexed_data[cost_index].base_cost; //Current nodes congestion cost
+
+            for (RREdgeId edge : rr_graph.edge_range(curr.node)) {
+                int iswitch = rr_graph.edge_switch(edge);
+                float new_delay = device_ctx.rr_switch_inf[iswitch].Tdel;
+
+                RRNodeId next_node = rr_graph.edge_sink_node(edge);
+
+                t_pq_entry next;
+                next.congestion = new_cong; //Of current node
+                next.delay = new_delay;     //To reach next node
+                next.node = next_node;
+                next.level = curr.level + 1;
+
+                pq.push(next);
+            }
+        } else {
+            VPR_ERROR(VPR_ERROR_ROUTE, "Unrecognized RR type");
+        }
+    }
+}
 
 } // namespace util

@@ -1,48 +1,56 @@
-#pragma once
+#ifndef ROUTER_LOOKAHEAD_MAP_H_
+#define ROUTER_LOOKAHEAD_MAP_H_
 
-#include <string>
-#include <limits>
-#include "vtr_ndmatrix.h"
+#include <vector>
+#include "physical_types.h"
 #include "router_lookahead.h"
+#include "router_lookahead_map_utils.h"
+#include "router_lookahead_cost_map.h"
 
+// Implementation of RouterLookahead based on source segment and destination rr node types
 class MapLookahead : public RouterLookahead {
-  protected:
+  private:
+    //Look-up table from SOURCE/OPIN to CHANX/CHANY of various types
+    mutable util::t_src_opin_delays src_opin_delays;
+
+    //Look-up table from CHANX/CHANY to SINK/IPIN of various types
+    mutable util::t_chan_ipins_delays chan_ipins_delays;
+
+    //Runs the dijkstra algorithm and stores the paths found during the expansion
+    template<typename Entry>
+    std::pair<float, int> run_dijkstra(int start_node_ind,
+                                       std::vector<bool>* node_expanded,
+                                       std::vector<util::Search_Path>* paths,
+                                       util::RoutingCosts* routing_costs) const;
+
+    //Returns delay and congestion for the SOURCE/OPIN to CHAN connections.
+    //It relies on a pre-computed data structure (t_src_opin_delays) for fast_lookups.
+    std::pair<float, float> get_src_opin_delays(RRNodeId from_node, int delta_x, int delta_y, float criticality_fac) const;
+
+    //Returns delay and congestion for the CHAN to SINK/IPIN connections.
+    //It relies on a pre-computed data structure (t_chan_ipin_delays) for fast_lookups.
+    float get_chan_ipin_delays(RRNodeId to_node) const;
+
+    void compute_router_src_opin_lookahead() const;
+    void compute_router_chan_ipin_lookahead() const;
+
+    template<typename Entry>
+    bool add_paths(int start_node_ind,
+                   Entry current,
+                   const std::vector<util::Search_Path>& paths,
+                   util::RoutingCosts* routing_costs) const;
+
+    std::pair<int, int> get_xy_deltas(const RRNodeId from_node, const RRNodeId to_node) const;
+
+  public:
     float get_expected_cost(int node, int target_node, const t_conn_cost_params& params, float R_upstream) const override;
+    float get_map_cost(int from_node_ind, int to_node_ind, float criticality_fac) const;
     void compute(const std::vector<t_segment_inf>& segment_inf) override;
+
     void read(const std::string& file) override;
     void write(const std::string& file) const override;
+
+    CostMap cost_map_;
 };
 
-/* f_cost_map is an array of these cost entries that specifies delay/congestion estimates
- * to travel relative x/y distances */
-class Cost_Entry {
-  public:
-    float delay;
-    float congestion;
-
-    Cost_Entry()
-        : Cost_Entry(std::numeric_limits<float>::quiet_NaN(),
-                     std::numeric_limits<float>::quiet_NaN()) {
-    }
-
-    Cost_Entry(float set_delay, float set_congestion) {
-        delay = set_delay;
-        congestion = set_congestion;
-    }
-};
-
-/* provides delay/congestion estimates to travel specified distances
- * in the x/y direction */
-typedef vtr::NdMatrix<Cost_Entry, 4> t_wire_cost_map; //[0..1][[0..num_seg_types-1]0..device_ctx.grid.width()-1][0..device_ctx.grid.height()-1]
-                                                      //[0..1] entry distinguish between CHANX/CHANY start nodes respectively
-
-void read_router_lookahead(const std::string& file);
-void write_router_lookahead(const std::string& file);
-
-/* Computes the lookahead map to be used by the router. If a map was computed prior to this, a new one will not be computed again.
- * The rr graph must have been built before calling this function. */
-void compute_router_lookahead(const std::vector<t_segment_inf>& segment_inf);
-
-/* queries the lookahead_map (should have been computed prior to routing) to get the expected cost
- * from the specified source to the specified target */
-float get_lookahead_map_cost(RRNodeId from_node, RRNodeId to_node, float criticality_fac);
+#endif
