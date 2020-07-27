@@ -9,7 +9,7 @@
 
 // Implementation of RouterLookahead based on source segment and destination rr node types
 class MapLookahead : public RouterLookahead {
-  private:
+  protected:
     //Look-up table from SOURCE/OPIN to CHANX/CHANY of various types
     mutable util::t_src_opin_delays src_opin_delays;
 
@@ -40,7 +40,7 @@ class MapLookahead : public RouterLookahead {
                    const std::vector<util::Search_Path>& paths,
                    util::RoutingCosts* routing_costs) const;
 
-    std::pair<int, int> get_xy_deltas(const RRNodeId from_node, const RRNodeId to_node) const;
+    virtual std::pair<int, int> get_xy_deltas(const RRNodeId from_node, const RRNodeId to_node) const;
 
   public:
     float get_expected_cost(int node, int target_node, const t_conn_cost_params& params, float R_upstream) const override;

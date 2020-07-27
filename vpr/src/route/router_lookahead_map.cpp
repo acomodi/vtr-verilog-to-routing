@@ -5,7 +5,6 @@
 
 #include "rr_node.h"
 #include "router_lookahead_map_utils.h"
-#include "router_lookahead_sampling.h"
 #include "globals.h"
 #include "vtr_math.h"
 #include "vtr_time.h"
