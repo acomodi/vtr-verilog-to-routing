@@ -264,7 +264,7 @@ float MapLookahead::get_map_cost(int from_node_ind,
 
     auto& device_ctx = g_vpr_ctx.device();
 
-    auto from_node_type = device_ctx.rr_nodes[to_node_ind].type();
+    auto from_node_type = device_ctx.rr_nodes[from_node_ind].type();
 
     RRNodeId to_node(to_node_ind);
     RRNodeId from_node(from_node_ind);
@@ -290,9 +290,6 @@ float MapLookahead::get_map_cost(int from_node_ind,
     float expected_delay = cost_entry.delay + extra_delay;
     float expected_congestion = cost_entry.congestion + extra_congestion;
 
-    float site_pin_delay = this->get_chan_ipin_delays(to_node);
-    expected_delay += site_pin_delay;
-
     float expected_cost = criticality_fac * expected_delay + (1.0 - criticality_fac) * expected_congestion;
 
     VTR_LOGV_DEBUG(f_router_debug, "Requested lookahead from node %d to %d\n", from_node_ind, to_node_ind);
@@ -304,7 +301,6 @@ float MapLookahead::get_map_cost(int from_node_ind,
     VTR_LOGV_DEBUG(f_router_debug, "Lookahead congestion: %g\n", expected_congestion);
     VTR_LOGV_DEBUG(f_router_debug, "Criticality: %g\n", criticality_fac);
     VTR_LOGV_DEBUG(f_router_debug, "Lookahead cost: %g\n", expected_cost);
-    VTR_LOGV_DEBUG(f_router_debug, "Site pin delay: %g\n", site_pin_delay);
 
     if (!std::isfinite(expected_cost)) {
         VTR_LOG_ERROR("infinite cost for segment %d at (%d, %d)\n", from_seg_index, (int)dx, (int)dy);
@@ -341,9 +337,6 @@ bool MapLookahead::add_paths(int start_node_ind,
     }
     path.push_back(start_node_ind);
 
-    float site_pin_delay = this->get_chan_ipin_delays(node);
-    current.adjust_Tsw(-site_pin_delay);
-
     // add each node along the path subtracting the incremental costs from the current costs
     Entry start_to_here(start_node_ind, UNDEFINED, nullptr);
     int parent = start_node_ind;
@@ -352,7 +345,7 @@ bool MapLookahead::add_paths(int start_node_ind,
         auto& here = device_ctx.rr_nodes[*it];
         int seg_index = device_ctx.rr_indexed_data[here.cost_index()].seg_index;
 
-        auto chan_type = rr_graph.node_type(node);
+        auto chan_type = rr_graph.node_type(this_node);
 
         int ichan = 0;
         if (chan_type == CHANY) {
