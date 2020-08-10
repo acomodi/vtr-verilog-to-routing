@@ -55,9 +55,9 @@ void CostMap::set_counts(size_t seg_count) {
     cost_map_.clear();
     offset_.clear();
     penalty_.clear();
-    cost_map_.resize({2, seg_count});
-    offset_.resize({2, seg_count});
-    penalty_.resize({2, seg_count});
+    cost_map_.resize({1, seg_count});
+    offset_.resize({1, seg_count});
+    penalty_.resize({1, seg_count});
     seg_count_ = seg_count;
 }
 
@@ -73,24 +73,19 @@ static util::Cost_Entry penalize(const util::Cost_Entry& entry, int distance, fl
 }
 
 // get a cost entry for a segment type, chan type, and offset
-util::Cost_Entry CostMap::find_cost(int from_seg_index, e_rr_type rr_type, int delta_x, int delta_y) const {
-    int chan_index = 0;
-    if (rr_type == CHANY) {
-        chan_index = 1;
-    }
-
+util::Cost_Entry CostMap::find_cost(int from_seg_index, int delta_x, int delta_y) const {
     VTR_ASSERT(from_seg_index >= 0 && from_seg_index < (ssize_t)offset_.size());
-    const auto& cost_map = cost_map_[chan_index][from_seg_index];
+    const auto& cost_map = cost_map_[0][from_seg_index];
     if (cost_map.dim_size(0) == 0 || cost_map.dim_size(1) == 0) {
         return util::Cost_Entry();
     }
 
-    vtr::Point<int> coord(delta_x - offset_[chan_index][from_seg_index].first,
-                          delta_y - offset_[chan_index][from_seg_index].second);
+    vtr::Point<int> coord(delta_x - offset_[0][from_seg_index].first,
+                          delta_y - offset_[0][from_seg_index].second);
     vtr::Rect<int> bounds(0, 0, cost_map.dim_size(0), cost_map.dim_size(1));
     auto closest = closest_point_in_rect(bounds, coord);
-    auto cost = cost_map_[chan_index][from_seg_index][closest.x()][closest.y()];
-    float penalty = penalty_[chan_index][from_seg_index];
+    auto cost = cost_map_[0][from_seg_index][closest.x()][closest.y()];
+    float penalty = penalty_[0][from_seg_index];
     auto distance = manhattan_distance(closest, coord);
     return penalize(cost, distance, penalty);
 }
@@ -98,124 +93,118 @@ util::Cost_Entry CostMap::find_cost(int from_seg_index, e_rr_type rr_type, int d
 // set the cost map for a segment type and chan type, filling holes
 void CostMap::set_cost_map(const util::RoutingCosts& delay_costs, const util::RoutingCosts& base_costs) {
     // calculate the bounding boxes
-    vtr::Matrix<vtr::Rect<int>> bounds({2, seg_count_});
+    vtr::Matrix<vtr::Rect<int>> bounds({1, seg_count_});
     for (const auto& entry : delay_costs) {
-        bounds[entry.first.chan_index][entry.first.seg_index].expand_bounding_box(vtr::Rect<int>(entry.first.delta));
+        bounds[0][entry.first.seg_index].expand_bounding_box(vtr::Rect<int>(entry.first.delta));
     }
     for (const auto& entry : base_costs) {
-        bounds[entry.first.chan_index][entry.first.seg_index].expand_bounding_box(vtr::Rect<int>(entry.first.delta));
+        bounds[0][entry.first.seg_index].expand_bounding_box(vtr::Rect<int>(entry.first.delta));
     }
 
     // store bounds
-    for (size_t chan = 0; chan < 2; chan++) {
-        for (size_t seg = 0; seg < seg_count_; seg++) {
-            const auto& chan_seg_bounds = bounds[chan][seg];
-            if (chan_seg_bounds.empty()) {
-                // Didn't find any sample routes, so routing isn't possible between these segment/chan types.
-                offset_[chan][seg] = std::make_pair(0, 0);
-                cost_map_[chan][seg] = vtr::NdMatrix<util::Cost_Entry, 2>(
-                    {size_t(0), size_t(0)});
-                continue;
-            } else {
-                offset_[chan][seg] = std::make_pair(chan_seg_bounds.xmin(), chan_seg_bounds.ymin());
-                cost_map_[chan][seg] = vtr::NdMatrix<util::Cost_Entry, 2>(
-                    {size_t(chan_seg_bounds.width()), size_t(chan_seg_bounds.height())});
-            }
+    for (size_t seg = 0; seg < seg_count_; seg++) {
+        const auto& seg_bounds = bounds[0][seg];
+        if (seg_bounds.empty()) {
+            // Didn't find any sample routes, so routing isn't possible between these segment/chan types.
+            offset_[0][seg] = std::make_pair(0, 0);
+            cost_map_[0][seg] = vtr::NdMatrix<util::Cost_Entry, 2>(
+                {size_t(0), size_t(0)});
+            continue;
+        } else {
+            offset_[0][seg] = std::make_pair(seg_bounds.xmin(), seg_bounds.ymin());
+            cost_map_[0][seg] = vtr::NdMatrix<util::Cost_Entry, 2>(
+                {size_t(seg_bounds.width()), size_t(seg_bounds.height())});
         }
     }
 
     // store entries into the matrices
     for (const auto& entry : delay_costs) {
         int seg = entry.first.seg_index;
-        int chan = entry.first.chan_index;
-        const auto& chan_seg_bounds = bounds[chan][seg];
-        int x = entry.first.delta.x() - chan_seg_bounds.xmin();
-        int y = entry.first.delta.y() - chan_seg_bounds.ymin();
-        cost_map_[chan][seg][x][y].delay = entry.second;
+        const auto& seg_bounds = bounds[0][seg];
+        int x = entry.first.delta.x() - seg_bounds.xmin();
+        int y = entry.first.delta.y() - seg_bounds.ymin();
+        cost_map_[0][seg][x][y].delay = entry.second;
     }
     for (const auto& entry : base_costs) {
         int seg = entry.first.seg_index;
-        int chan = entry.first.chan_index;
-        const auto& chan_seg_bounds = bounds[chan][seg];
-        int x = entry.first.delta.x() - chan_seg_bounds.xmin();
-        int y = entry.first.delta.y() - chan_seg_bounds.ymin();
-        cost_map_[chan][seg][x][y].congestion = entry.second;
+        const auto& seg_bounds = bounds[0][seg];
+        int x = entry.first.delta.x() - seg_bounds.xmin();
+        int y = entry.first.delta.y() - seg_bounds.ymin();
+        cost_map_[0][seg][x][y].congestion = entry.second;
     }
 
     // fill the holes
-    for (size_t chan = 0; chan < 2; chan++) {
-        for (size_t seg = 0; seg < seg_count_; seg++) {
-            penalty_[chan][seg] = std::numeric_limits<float>::infinity();
-            const auto& chan_seg_bounds = bounds[chan][seg];
-            if (chan_seg_bounds.empty()) {
-                continue;
-            }
-            auto& matrix = cost_map_[chan][seg];
+    for (size_t seg = 0; seg < seg_count_; seg++) {
+        penalty_[0][seg] = std::numeric_limits<float>::infinity();
+        const auto& seg_bounds = bounds[0][seg];
+        if (seg_bounds.empty()) {
+            continue;
+        }
+        auto& matrix = cost_map_[0][seg];
 
-            // calculate delay penalty
-            float min_delay = std::numeric_limits<float>::infinity(), max_delay = 0.f;
-            vtr::Point<int> min_location(0, 0), max_location(0, 0);
-            for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
-                for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
-                    util::Cost_Entry& cost_entry = matrix[ix][iy];
-                    if (cost_entry.valid()) {
-                        if (cost_entry.delay < min_delay) {
-                            min_delay = cost_entry.delay;
-                            min_location = vtr::Point<int>(ix, iy);
-                        }
-                        if (cost_entry.delay > max_delay) {
-                            max_delay = cost_entry.delay;
-                            max_location = vtr::Point<int>(ix, iy);
-                        }
+        // calculate delay penalty
+        float min_delay = std::numeric_limits<float>::infinity(), max_delay = 0.f;
+        vtr::Point<int> min_location(0, 0), max_location(0, 0);
+        for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
+            for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
+                util::Cost_Entry& cost_entry = matrix[ix][iy];
+                if (cost_entry.valid()) {
+                    if (cost_entry.delay < min_delay) {
+                        min_delay = cost_entry.delay;
+                        min_location = vtr::Point<int>(ix, iy);
+                    }
+                    if (cost_entry.delay > max_delay) {
+                        max_delay = cost_entry.delay;
+                        max_location = vtr::Point<int>(ix, iy);
                     }
                 }
             }
-            float delay_penalty = (max_delay - min_delay) / static_cast<float>(std::max(1, manhattan_distance(max_location, min_location)));
-            penalty_[chan][seg] = delay_penalty;
+        }
+        float delay_penalty = (max_delay - min_delay) / static_cast<float>(std::max(1, manhattan_distance(max_location, min_location)));
+        penalty_[0][seg] = delay_penalty;
 
-            // find missing cost entries and fill them in by copying a nearby cost entry
-            std::vector<std::tuple<unsigned, unsigned, util::Cost_Entry>> missing;
-            bool couldnt_fill = false;
-            auto shifted_bounds = vtr::Rect<int>(0, 0, chan_seg_bounds.width(), chan_seg_bounds.height());
-            int max_fill = 0;
-            for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
-                for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
-                    util::Cost_Entry& cost_entry = matrix[ix][iy];
-                    if (!cost_entry.valid()) {
-                        // maximum search radius
-                        util::Cost_Entry filler;
-                        int distance;
-                        std::tie(filler, distance) = get_nearby_cost_entry(matrix, ix, iy, shifted_bounds);
-                        if (filler.valid()) {
-                            missing.push_back(std::make_tuple(ix, iy, penalize(filler, distance, delay_penalty)));
-                            max_fill = std::max(max_fill, distance);
-                        } else {
-                            couldnt_fill = true;
-                        }
+        // find missing cost entries and fill them in by copying a nearby cost entry
+        std::vector<std::tuple<unsigned, unsigned, util::Cost_Entry>> missing;
+        bool couldnt_fill = false;
+        auto shifted_bounds = vtr::Rect<int>(0, 0, seg_bounds.width(), seg_bounds.height());
+        int max_fill = 0;
+        for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
+            for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
+                util::Cost_Entry& cost_entry = matrix[ix][iy];
+                if (!cost_entry.valid()) {
+                    // maximum search radius
+                    util::Cost_Entry filler;
+                    int distance;
+                    std::tie(filler, distance) = get_nearby_cost_entry(matrix, ix, iy, shifted_bounds);
+                    if (filler.valid()) {
+                        missing.push_back(std::make_tuple(ix, iy, penalize(filler, distance, delay_penalty)));
+                        max_fill = std::max(max_fill, distance);
+                    } else {
+                        couldnt_fill = true;
                     }
                 }
-                if (couldnt_fill) {
-                    // give up trying to fill an empty matrix
-                    break;
-                }
             }
-
-            if (!couldnt_fill) {
-                VTR_LOG("At %d: max_fill = %d, delay_penalty = %e\n", seg, max_fill, delay_penalty);
-            }
-
-            // write back the missing entries
-            for (auto& xy_entry : missing) {
-                matrix[std::get<0>(xy_entry)][std::get<1>(xy_entry)] = std::get<2>(xy_entry);
-            }
-
             if (couldnt_fill) {
-                VTR_LOG_WARN("Couldn't fill holes in the cost matrix for %d -> %ld, %d x %d bounding box\n",
-                             chan, seg, chan_seg_bounds.width(), chan_seg_bounds.height());
-                for (unsigned y = 0; y < matrix.dim_size(1); y++) {
-                    for (unsigned x = 0; x < matrix.dim_size(0); x++) {
-                        VTR_ASSERT(!matrix[x][y].valid());
-                    }
+                // give up trying to fill an empty matrix
+                break;
+            }
+        }
+
+        if (!couldnt_fill) {
+            VTR_LOG("At %d: max_fill = %d, delay_penalty = %e\n", seg, max_fill, delay_penalty);
+        }
+
+        // write back the missing entries
+        for (auto& xy_entry : missing) {
+            matrix[std::get<0>(xy_entry)][std::get<1>(xy_entry)] = std::get<2>(xy_entry);
+        }
+
+        if (couldnt_fill) {
+            VTR_LOG_WARN("Couldn't fill holes in the cost matrix for %ld, %d x %d bounding box\n",
+                         seg, seg_bounds.width(), seg_bounds.height());
+            for (unsigned y = 0; y < matrix.dim_size(1); y++) {
+                for (unsigned x = 0; x < matrix.dim_size(0); x++) {
+                    VTR_ASSERT(!matrix[x][y].valid());
                 }
             }
         }
@@ -227,54 +216,47 @@ void CostMap::set_cost_map(const util::RoutingCosts& delay_costs, const util::Ro
 // . => at or below average
 // * => invalid (missing)
 void CostMap::print(int iseg) const {
-    for (size_t chan_index = 0;
-         chan_index < 2;
-         chan_index++) {
-        auto& matrix = cost_map_[chan_index][iseg];
-        if (matrix.dim_size(0) == 0 || matrix.dim_size(1) == 0) {
-            VTR_LOG("cost EMPTY for chan_index = %lu\n", chan_index);
-            continue;
-        }
-        VTR_LOG("cost for chan_index = %lu (%zu, %zu)\n", chan_index, matrix.dim_size(0), matrix.dim_size(1));
-        double sum = 0.0;
-        for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
-            for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
-                const auto& entry = matrix[ix][iy];
-                if (entry.valid()) {
-                    sum += entry.delay;
-                }
+    auto& matrix = cost_map_[0][iseg];
+    if (matrix.dim_size(0) == 0 || matrix.dim_size(1) == 0) {
+        VTR_LOG("cost EMPTY");
+    }
+    double sum = 0.0;
+    for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
+        for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
+            const auto& entry = matrix[ix][iy];
+            if (entry.valid()) {
+                sum += entry.delay;
             }
         }
-        double avg = sum / ((double)matrix.dim_size(0) * (double)matrix.dim_size(1));
-        for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
-            for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
-                const auto& entry = matrix[ix][iy];
-                if (!entry.valid()) {
-                    VTR_LOG("*");
-                } else if (entry.delay * 4 > avg * 5) {
-                    VTR_LOG("O");
-                } else if (entry.delay > avg) {
-                    VTR_LOG("o");
-                } else if (entry.delay * 4 > avg * 3) {
-                    VTR_LOG(".");
-                } else {
-                    VTR_LOG(" ");
-                }
+    }
+    double avg = sum / ((double)matrix.dim_size(0) * (double)matrix.dim_size(1));
+    for (unsigned iy = 0; iy < matrix.dim_size(1); iy++) {
+        for (unsigned ix = 0; ix < matrix.dim_size(0); ix++) {
+            const auto& entry = matrix[ix][iy];
+            if (!entry.valid()) {
+                VTR_LOG("*");
+            } else if (entry.delay * 4 > avg * 5) {
+                VTR_LOG("O");
+            } else if (entry.delay > avg) {
+                VTR_LOG("o");
+            } else if (entry.delay * 4 > avg * 3) {
+                VTR_LOG(".");
+            } else {
+                VTR_LOG(" ");
             }
-            VTR_LOG("\n");
         }
+        VTR_LOG("\n");
     }
 }
 
 // list segment type and chan type pairs that have empty cost maps (debug)
 std::vector<std::pair<int, int>> CostMap::list_empty() const {
     std::vector<std::pair<int, int>> results;
-    for (int chan_index = 0; chan_index < (int)cost_map_.dim_size(1); chan_index++) {
-        for (int iseg = 0; iseg < (int)cost_map_.dim_size(0); iseg++) {
-            auto& matrix = cost_map_[chan_index][iseg];
-            if (matrix.dim_size(0) == 0 || matrix.dim_size(1) == 0) results.push_back(std::make_pair(chan_index, iseg));
-        }
+    for (int iseg = 0; iseg < (int)cost_map_.dim_size(0); iseg++) {
+        auto& matrix = cost_map_[0][iseg];
+        if (matrix.dim_size(0) == 0 || matrix.dim_size(1) == 0) results.push_back(std::make_pair(0, iseg));
     }
+
     return results;
 }
 
