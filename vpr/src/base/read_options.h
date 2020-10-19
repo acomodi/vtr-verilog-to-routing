@@ -140,6 +140,7 @@ struct t_options {
     argparse::ArgValue<float> acc_fac;
     argparse::ArgValue<int> bb_factor;
     argparse::ArgValue<e_base_cost_type> base_cost_type;
+    argparse::ArgValue<float> delay_norm_mult;
     argparse::ArgValue<float> bend_cost;
     argparse::ArgValue<e_route_type> RouteType;
     argparse::ArgValue<int> RouteChanWidth;

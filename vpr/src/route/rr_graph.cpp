@@ -259,7 +259,8 @@ static void alloc_rr_switch_inf(t_arch_switch_fanin& switch_fanin);
 static void rr_graph_externals(const std::vector<t_segment_inf>& segment_inf,
                                int max_chan_width,
                                int wire_to_rr_ipin_switch,
-                               enum e_base_cost_type base_cost_type);
+                               enum e_base_cost_type base_cost_type,
+                               float delay_norm_mult);
 
 static t_clb_to_clb_directs* alloc_and_load_clb_to_clb_directs(const t_direct_inf* directs, const int num_directs, const int delayless_switch);
 
@@ -300,6 +301,7 @@ static void build_rr_graph(const t_graph_type graph_type,
                            const float R_minW_nmos,
                            const float R_minW_pmos,
                            const enum e_base_cost_type base_cost_type,
+                           const float delay_norm_mult,
                            const enum e_clock_modeling clock_modeling,
                            const bool trim_empty_channels,
                            const bool trim_obs_channels,
@@ -331,6 +333,7 @@ void create_rr_graph(const t_graph_type graph_type,
                          grid,
                          segment_inf,
                          router_opts.base_cost_type,
+                         router_opts.delay_norm_mult,
                          &det_routing_arch->wire_to_rr_ipin_switch,
                          det_routing_arch->read_rr_graph_filename.c_str(),
                          router_opts.read_rr_edge_metadata,
@@ -361,6 +364,7 @@ void create_rr_graph(const t_graph_type graph_type,
                        det_routing_arch->R_minW_nmos,
                        det_routing_arch->R_minW_pmos,
                        router_opts.base_cost_type,
+                       router_opts.delay_norm_mult,
                        router_opts.clock_modeling,
                        router_opts.trim_empty_channels,
                        router_opts.trim_obs_channels,
@@ -423,6 +427,7 @@ static void build_rr_graph(const t_graph_type graph_type,
                            const float R_minW_nmos,
                            const float R_minW_pmos,
                            const enum e_base_cost_type base_cost_type,
+                           float delay_norm_mult,
                            const enum e_clock_modeling clock_modeling,
                            const bool trim_empty_channels,
                            const bool trim_obs_channels,
@@ -741,7 +746,9 @@ static void build_rr_graph(const t_graph_type graph_type,
     device_ctx.chan_width = nodes_per_chan;
 
     rr_graph_externals(segment_inf, max_chan_width,
-                       *wire_to_rr_ipin_switch, base_cost_type);
+                       *wire_to_rr_ipin_switch,
+                       base_cost_type,
+                       delay_norm_mult);
 
     check_rr_graph(graph_type, grid, types);
 
@@ -909,12 +916,13 @@ static void remap_rr_node_switch_indices(const t_arch_switch_fanin& switch_fanin
 static void rr_graph_externals(const std::vector<t_segment_inf>& segment_inf,
                                int max_chan_width,
                                int wire_to_rr_ipin_switch,
-                               enum e_base_cost_type base_cost_type) {
+                               enum e_base_cost_type base_cost_type,
+                               float delay_norm_mult) {
     auto& device_ctx = g_vpr_ctx.device();
 
     add_rr_graph_C_from_switches(device_ctx.rr_switch_inf[wire_to_rr_ipin_switch].Cin);
     alloc_and_load_rr_indexed_data(segment_inf, device_ctx.rr_node_indices,
-                                   max_chan_width, wire_to_rr_ipin_switch, base_cost_type);
+                                   max_chan_width, wire_to_rr_ipin_switch, base_cost_type, delay_norm_mult);
     load_rr_index_segments(segment_inf.size());
 }
 

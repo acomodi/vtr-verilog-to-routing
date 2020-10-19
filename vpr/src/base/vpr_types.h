@@ -1183,6 +1183,7 @@ struct t_router_opts {
     bool trim_obs_channels;
     enum e_router_algorithm router_algorithm;
     enum e_base_cost_type base_cost_type;
+    float delay_norm_mult;
     float astar_fac;
     float max_criticality;
     float criticality_exp;

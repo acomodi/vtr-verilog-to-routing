@@ -252,6 +252,7 @@ class RrGraphSerializer final : public uxsd::RrGraphBase<RrGraphContextTypes> {
     RrGraphSerializer(
         const t_graph_type graph_type,
         const enum e_base_cost_type base_cost_type,
+        const float delay_norm_mult,
         int* wire_to_rr_ipin_switch,
         bool do_check_rr_graph,
         const char* read_rr_graph_name,
@@ -279,6 +280,7 @@ class RrGraphSerializer final : public uxsd::RrGraphBase<RrGraphContextTypes> {
         , read_rr_graph_filename_(read_rr_graph_filename)
         , graph_type_(graph_type)
         , base_cost_type_(base_cost_type)
+        , delay_norm_mult_(delay_norm_mult)
         , do_check_rr_graph_(do_check_rr_graph)
         , read_rr_graph_name_(read_rr_graph_name)
         , read_edge_metadata_(read_edge_metadata)
@@ -1469,7 +1471,8 @@ class RrGraphSerializer final : public uxsd::RrGraphBase<RrGraphContextTypes> {
             *rr_node_indices_,
             max_chan_width,
             *wire_to_rr_ipin_switch_,
-            base_cost_type_);
+            base_cost_type_,
+            delay_norm_mult_);
 
         VTR_ASSERT(rr_indexed_data_->size() == seg_index_.size());
         for (size_t i = 0; i < seg_index_.size(); ++i) {
@@ -1849,6 +1852,7 @@ class RrGraphSerializer final : public uxsd::RrGraphBase<RrGraphContextTypes> {
     // Constant data for loads and writes.
     const t_graph_type graph_type_;
     const enum e_base_cost_type base_cost_type_;
+    const float delay_norm_mult_;
     const bool do_check_rr_graph_;
     const char* read_rr_graph_name_;
     const bool read_edge_metadata_;

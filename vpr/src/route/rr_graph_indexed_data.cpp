@@ -18,7 +18,8 @@
 
 static void load_rr_indexed_data_base_costs(int nodes_per_chan,
                                             const t_rr_node_indices& L_rr_node_indices,
-                                            enum e_base_cost_type base_cost_type);
+                                            enum e_base_cost_type base_cost_type,
+                                            float delay_norm_mult);
 
 static float get_delay_normalization_fac(int nodes_per_chan,
                                          const t_rr_node_indices& L_rr_node_indices);
@@ -56,7 +57,8 @@ void alloc_and_load_rr_indexed_data(const std::vector<t_segment_inf>& segment_in
                                     const t_rr_node_indices& L_rr_node_indices,
                                     const int nodes_per_chan,
                                     int wire_to_ipin_switch,
-                                    enum e_base_cost_type base_cost_type) {
+                                    enum e_base_cost_type base_cost_type,
+                                    float delay_norm_mult) {
     int iseg, length, i, index;
 
     auto& device_ctx = g_vpr_ctx.mutable_device();
@@ -125,9 +127,9 @@ void alloc_and_load_rr_indexed_data(const std::vector<t_segment_inf>& segment_in
     fixup_rr_indexed_data_T_values(num_segment);
 
     load_rr_indexed_data_base_costs(nodes_per_chan, L_rr_node_indices,
-                                    base_cost_type);
+                                    base_cost_type, delay_norm_mult);
 
-    if (false) print_rr_index_info(segment_inf);
+    if (true) print_rr_index_info(segment_inf);
 }
 
 void load_rr_index_segments(const int num_segment) {
@@ -152,7 +154,8 @@ void load_rr_index_segments(const int num_segment) {
 
 static void load_rr_indexed_data_base_costs(int nodes_per_chan,
                                             const t_rr_node_indices& L_rr_node_indices,
-                                            enum e_base_cost_type base_cost_type) {
+                                            enum e_base_cost_type base_cost_type,
+                                            float delay_norm_mult) {
     /* Loads the base_cost member of device_ctx.rr_indexed_data according to the specified *
      * base_cost_type.                                                          */
 
@@ -164,7 +167,7 @@ static void load_rr_indexed_data_base_costs(int nodes_per_chan,
     if (base_cost_type == DEMAND_ONLY || base_cost_type == DEMAND_ONLY_NORMALIZED_LENGTH) {
         delay_normalization_fac = 1.;
     } else {
-        delay_normalization_fac = get_delay_normalization_fac(nodes_per_chan, L_rr_node_indices);
+        delay_normalization_fac = get_delay_normalization_fac(nodes_per_chan, L_rr_node_indices) * delay_norm_mult;
     }
 
     device_ctx.rr_indexed_data[SOURCE_COST_INDEX].base_cost = delay_normalization_fac;
@@ -480,6 +483,8 @@ static void load_rr_indexed_data_T_values(int index_start,
 
 static void calculate_average_switch(int inode, double& avg_switch_R, double& avg_switch_T, double& avg_switch_Cinternal, int& num_switches, short& buffered) {
     auto& device_ctx = g_vpr_ctx.device();
+    int cost_index = device_ctx.rr_nodes[inode].cost_index();
+    int seg_index = device_ctx.rr_indexed_data[cost_index].seg_index;
     int num_edges = device_ctx.rr_nodes[inode].num_edges();
     avg_switch_R = 0;
     avg_switch_T = 0;
@@ -488,6 +493,8 @@ static void calculate_average_switch(int inode, double& avg_switch_R, double& av
     buffered = UNDEFINED;
     for (int iedge = 0; iedge < num_edges; iedge++) {
         int to_node_index = device_ctx.rr_nodes[inode].edge_sink_node(iedge);
+        int to_cost_index = device_ctx.rr_nodes[to_node_index].cost_index();
+        int to_seg_index = device_ctx.rr_indexed_data[to_cost_index].seg_index;
         /* want to get C/R/Tdel/Cinternal of switches that connect this track segment to other track segments */
         if (device_ctx.rr_nodes[to_node_index].type() == CHANX || device_ctx.rr_nodes[to_node_index].type() == CHANY) {
             int switch_index = device_ctx.rr_nodes[inode].edge_switch(iedge);

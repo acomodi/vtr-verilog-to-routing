@@ -96,6 +96,7 @@ struct ParseCircuitFormat {
         return {"auto", "blif", "eblif"};
     }
 };
+
 struct ParseRoutePredictor {
     ConvertedValue<e_routing_failure_predictor> from_str(std::string str) {
         ConvertedValue<e_routing_failure_predictor> conv_value;
@@ -1913,6 +1914,13 @@ argparse::ArgumentParser create_arg_parser(std::string prog_name, t_options& arg
             "      by segment type frequency\n"
             "(Default: demand_only for breadth-first router,\n"
             "          delay_normalized_length for timing-driven router)")
+        .show_in(argparse::ShowIn::HELP_ONLY);
+
+    route_grp.add_argument(args.delay_norm_mult, "--delay_normalization_multiplier")
+        .help(
+            "Sets a correction multiplier factor to the delay "
+            "normalization factor that is used to calculate the base costs")
+        .default_value("1.0")
         .show_in(argparse::ShowIn::HELP_ONLY);
 
     route_grp.add_argument(args.bend_cost, "--bend_cost")

@@ -362,6 +362,7 @@ static void SetupRouterOpts(const t_options& Options, t_router_opts* RouterOpts)
 
     RouterOpts->initial_pres_fac = Options.initial_pres_fac;
     RouterOpts->base_cost_type = Options.base_cost_type;
+    RouterOpts->delay_norm_mult = Options.delay_norm_mult;
     RouterOpts->first_iter_pres_fac = Options.first_iter_pres_fac;
     RouterOpts->acc_fac = Options.acc_fac;
     RouterOpts->bend_cost = Options.bend_cost;
