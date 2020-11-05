@@ -277,7 +277,7 @@ static float get_delay_normalization_fac() {
 
     // XXX: testing doubling the delay_norm_factor. Higher base costs seem to both
     //      improve performance of symbiflow and titan tests.
-    float delay_norm_fac = (Tdel_sum / Tdel_num) * 3;
+    float delay_norm_fac = (Tdel_sum / Tdel_num) * 4;
 
     if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_RR_GRAPH_INDEXED_DATA)) {
         std::ofstream out_file;
