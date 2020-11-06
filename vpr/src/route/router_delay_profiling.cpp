@@ -54,7 +54,8 @@ bool RouterDelayProfiler::calculate_delay(int source_node, int sink_node, const 
 
     t_conn_cost_params cost_params;
     cost_params.criticality = 1.;
-    cost_params.astar_fac = router_opts.astar_fac;
+    // Using higher astar fac to compute delays
+    cost_params.astar_fac = 1.5;
     cost_params.bend_cost = router_opts.bend_cost;
 
     route_budgets budgeting_inf;
