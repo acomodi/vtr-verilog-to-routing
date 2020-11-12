@@ -303,6 +303,8 @@ static void load_rr_indexed_data_T_values() {
     auto& rr_nodes = device_ctx.rr_nodes;
     auto& rr_indexed_data = device_ctx.rr_indexed_data;
 
+    rr_nodes.init_fan_in_list();
+
     std::vector<int> num_nodes_of_index(rr_indexed_data.size(), 0);
     std::vector<std::vector<float>> C_total(rr_indexed_data.size());
     std::vector<std::vector<float>> R_total(rr_indexed_data.size());
@@ -372,7 +374,7 @@ static void load_rr_indexed_data_T_values() {
         }
     }
 
-    auto& segment_inf = device_ctx.rr_segments;
+    rr_nodes.clear_fan_in_list();
 
     for (size_t cost_index = CHANX_COST_INDEX_START;
          cost_index < rr_indexed_data.size(); cost_index++) {
@@ -422,17 +424,17 @@ static void load_rr_indexed_data_T_values() {
 
 static void calculate_average_switch(int inode, double& avg_switch_R, double& avg_switch_T, double& avg_switch_Cinternal, int& num_switches, short& buffered) {
     auto& device_ctx = g_vpr_ctx.device();
-    int num_edges = device_ctx.rr_nodes[inode].num_edges();
+    const auto& rr_nodes = device_ctx.rr_nodes.view();
+
     avg_switch_R = 0;
     avg_switch_T = 0;
     avg_switch_Cinternal = 0;
     num_switches = 0;
     buffered = UNDEFINED;
-    for (int iedge = 0; iedge < num_edges; iedge++) {
-        int to_node_index = device_ctx.rr_nodes[inode].edge_sink_node(iedge);
+    for (const auto& edge : rr_nodes.fan_in_list(RRNodeId(inode))) {
         /* want to get C/R/Tdel/Cinternal of switches that connect this track segment to other track segments */
-        if (device_ctx.rr_nodes[to_node_index].type() == CHANX || device_ctx.rr_nodes[to_node_index].type() == CHANY) {
-            int switch_index = device_ctx.rr_nodes[inode].edge_switch(iedge);
+        if (device_ctx.rr_nodes[inode].type() == CHANX || device_ctx.rr_nodes[inode].type() == CHANY) {
+            int switch_index = device_ctx.rr_nodes.edge_switch(edge);
 
             if (device_ctx.rr_switch_inf[switch_index].type() == SwitchType::SHORT) continue;
 
