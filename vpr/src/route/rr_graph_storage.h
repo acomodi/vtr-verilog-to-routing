@@ -406,6 +406,7 @@ class t_rr_graph_storage {
         node_ptc_.clear();
         node_first_edge_.clear();
         node_fan_in_.clear();
+        node_fan_in_list_.clear();
         edge_src_node_.clear();
         edge_dest_node_.clear();
         edge_switch_.clear();
@@ -423,6 +424,7 @@ class t_rr_graph_storage {
         node_ptc_.shrink_to_fit();
         node_first_edge_.shrink_to_fit();
         node_fan_in_.shrink_to_fit();
+        node_fan_in_list_.shrink_to_fit();
         edge_src_node_.shrink_to_fit();
         edge_dest_node_.shrink_to_fit();
         edge_switch_.shrink_to_fit();
@@ -561,8 +563,18 @@ class t_rr_graph_storage {
      * been allocated
      *
      * This is an expensive, O(N), operation so it should be called once you
-     * have a complete rr-graph and not called often.*/
+     * have a complete rr-graph and not called often.
+     *
+     * There are two fan in generation methods:
+     *  - init_fan_in: generates only the count on fan-in edges for a specific node
+     *  - init_fan_in_list: generates a list of fan-in edges IDs for a specific node
+     *                      This is useful for specific processes and not for the
+     *                      whole VPR flow, therefore a `clear` function is provided as well
+     *                      to destroy the generated list.
+     * */
     void init_fan_in();
+    void init_fan_in_list();
+    void clear_fan_in_list();
 
     static inline e_direction get_node_direction(
         vtr::array_view_id<RRNodeId, const t_rr_node_data> node_storage,
@@ -633,6 +645,9 @@ class t_rr_graph_storage {
     // Fan in counts for each RR node.
     vtr::vector<RRNodeId, t_edge_size> node_fan_in_;
 
+    // Fan in edges for each RR node.
+    vtr::vector<RRNodeId, std::vector<RREdgeId>> node_fan_in_list_;
+
     // Edge storage.
     vtr::vector<RREdgeId, RRNodeId> edge_src_node_;
     vtr::vector<RREdgeId, RRNodeId> edge_dest_node_;
@@ -680,6 +695,7 @@ class t_rr_graph_view {
         const vtr::array_view_id<RRNodeId, const t_rr_node_ptc_data> node_ptc,
         const vtr::array_view_id<RRNodeId, const RREdgeId> node_first_edge,
         const vtr::array_view_id<RRNodeId, const t_edge_size> node_fan_in,
+        const vtr::array_view_id<RRNodeId, const std::vector<RREdgeId>> node_fan_in_list,
         const vtr::array_view_id<RREdgeId, const RRNodeId> edge_src_node,
         const vtr::array_view_id<RREdgeId, const RRNodeId> edge_dest_node,
         const vtr::array_view_id<RREdgeId, const short> edge_switch)
@@ -687,6 +703,7 @@ class t_rr_graph_view {
         , node_ptc_(node_ptc)
         , node_first_edge_(node_first_edge)
         , node_fan_in_(node_fan_in)
+        , node_fan_in_list_(node_fan_in_list)
         , edge_src_node_(edge_src_node)
         , edge_dest_node_(edge_dest_node)
         , edge_switch_(edge_switch) {}
@@ -747,6 +764,11 @@ class t_rr_graph_view {
         return node_fan_in_[id];
     }
 
+    /* Retrieve fan_in edges vector for RRNodeId. */
+    std::vector<RREdgeId> fan_in_list(RRNodeId id) const {
+        return node_fan_in_list_[id];
+    }
+
     // This prefetechs hot RR node data required for optimization.
     //
     // Note: This is optional, but may lower time spent on memory stalls in
@@ -787,6 +809,7 @@ class t_rr_graph_view {
     vtr::array_view_id<RRNodeId, const t_rr_node_ptc_data> node_ptc_;
     vtr::array_view_id<RRNodeId, const RREdgeId> node_first_edge_;
     vtr::array_view_id<RRNodeId, const t_edge_size> node_fan_in_;
+    vtr::array_view_id<RRNodeId, const std::vector<RREdgeId>> node_fan_in_list_;
     vtr::array_view_id<RREdgeId, const RRNodeId> edge_src_node_;
     vtr::array_view_id<RREdgeId, const RRNodeId> edge_dest_node_;
     vtr::array_view_id<RREdgeId, const short> edge_switch_;

@@ -393,6 +393,24 @@ void t_rr_graph_storage::init_fan_in() {
     }
 }
 
+void t_rr_graph_storage::init_fan_in_list() {
+    //Reset all fan-ins to zero
+    edges_read_ = true;
+    node_fan_in_list_.resize(node_storage_.size(), std::vector<RREdgeId>(0));
+    node_fan_in_list_.shrink_to_fit();
+
+    //Walk the graph and increment fanin on all dwnstream nodes
+    for (const auto& edge_id : edge_dest_node_.keys()) {
+        auto& dest_node = edge_dest_node_[edge_id];
+
+        node_fan_in_list_[dest_node].push_back(edge_id);
+    }
+}
+
+void t_rr_graph_storage::clear_fan_in_list() {
+    node_fan_in_list_.clear();
+}
+
 size_t t_rr_graph_storage::count_rr_switches(
     size_t num_arch_switches,
     t_arch_switch_inf* arch_switch_inf,
@@ -735,6 +753,7 @@ t_rr_graph_view t_rr_graph_storage::view() const {
         vtr::make_const_array_view_id(node_ptc_),
         vtr::make_const_array_view_id(node_first_edge_),
         vtr::make_const_array_view_id(node_fan_in_),
+        vtr::make_const_array_view_id(node_fan_in_list_),
         vtr::make_const_array_view_id(edge_src_node_),
         vtr::make_const_array_view_id(edge_dest_node_),
         vtr::make_const_array_view_id(edge_switch_));
