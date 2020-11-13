@@ -1872,7 +1872,7 @@ argparse::ArgumentParser create_arg_parser(std::string prog_name, t_options& arg
 
     route_grp.add_argument(args.initial_pres_fac, "--initial_pres_fac")
         .help("Sets the present overuse factor for the second routing iteration")
-        .default_value("0.5")
+        .default_value("1.0")
         .show_in(argparse::ShowIn::HELP_ONLY);
 
     route_grp.add_argument(args.pres_fac_mult, "--pres_fac_mult")
